@@ -17,7 +17,7 @@ var datapath string
 var latestValues map[string]string
 
 func appendSeparatorIfNecessary(path string) string {
-	var lastChar = path[len(datapath)-1]
+	var lastChar = path[len(path)-1]
 	if lastChar != filepath.Separator {
 		path += string(filepath.Separator)
 	}
@@ -26,8 +26,8 @@ func appendSeparatorIfNecessary(path string) string {
 
 const response = "getData() method returned successfully"
 
-func getCustomers(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, "hi")
+func rootPath(c *gin.Context) {
+	c.HTML(http.StatusOK, "index.html", gin.H{})
 }
 
 func setDataPath(c *gin.Context) {
@@ -76,7 +76,8 @@ func addData(c *gin.Context) {
 }
 
 func makeTopic(c *gin.Context) {
-	name := c.Param("name")
+	name := c.Query("name")
+	fmt.Printf("name = %s\n", name)
 	_, err := os.Create(datapath + name + "-topic-metrics-data.txt")
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -90,7 +91,7 @@ func makeTopic(c *gin.Context) {
 }
 
 func getData(c *gin.Context) {
-	topic := c.Param("topic")
+	topic := c.Query("topic")
 	_, err := os.OpenFile(datapath+topic+"-topic-metrics-data.txt", os.O_RDWR, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -107,7 +108,7 @@ func getData(c *gin.Context) {
 }
 
 func getLatestValue(c *gin.Context) {
-	topic := c.Param("topic")
+	topic := c.Query("topic")
 	f, err := os.OpenFile(datapath+topic+"-topic-metrics-data.txt", os.O_RDWR, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -158,6 +159,7 @@ func listTopics(c *gin.Context) {
 func main() {
 	// gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
+	router.LoadHTMLFiles("index.html")
 
 	path, isSet := os.LookupEnv("METRICS_PROCESSOR_DATAPATH")
 	if !isSet {
@@ -172,9 +174,11 @@ func main() {
 	}
 
 	router.Handle("GET", "/configure", setDataPath)
-	router.Handle("GET", "/data/:topic", getData)
-	router.Handle("GET", "/customers", getCustomers)
-	router.Handle("PUT", "/data", addData)
+	router.Handle("GET", "/data", getData)
+	router.Handle("GET", "/", rootPath)
+	router.Handle("PUT", "/put", addData)
+	router.Handle("PUT", "/create", makeTopic)
+	router.Handle("GET", "/latest", getLatestValue)
 
 	router.Run(":8080")
 }
