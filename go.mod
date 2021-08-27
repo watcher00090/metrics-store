@@ -1,4 +1,4 @@
-module metrics-processor
+module metrics-store
 
 go 1.13
 
