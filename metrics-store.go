@@ -36,10 +36,12 @@ func setDataPath(c *gin.Context) {
 	path := c.Query("datapath")
 	if path == "" {
 		c.String(http.StatusBadRequest, "ERROR: Please supply the 'datapath' query parameter and try again.")
+		return
 	}
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "ERROR: Could not convert the datapath to an absolute path. Error: "+err.Error())
+		return
 	}
 	datapath = appendSeparatorIfNecessary(absPath)
 	c.String(http.StatusOK, "SUCCESS: The datapath has been set to "+datapath)
@@ -57,11 +59,13 @@ func addData(c *gin.Context) {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
 			c.String(http.StatusInternalServerError, "ERROR: The topic '"+topic+"' does not exist. Please create the topic and try again. ")
-		}
-		if errors.Is(err, os.ErrPermission) {
+			return
+		} else if errors.Is(err, os.ErrPermission) {
 			c.String(http.StatusInternalServerError, "ERROR: The backing file has invalid permissions. Please give the user running the metrics processor RW permissions over the backing file and try again.")
+			return
+		} else {
+			panic("ERROR: " + err.Error())
 		}
-		panic("ERROR: " + err.Error())
 	}
 
 	bytes, err := json.Marshal(data)
@@ -87,8 +91,11 @@ func makeTopic(c *gin.Context) {
 		if err != nil {
 			if errors.Is(err, os.ErrPermission) {
 				c.String(http.StatusInternalServerError, "ERROR: Unable to create the backing file due to file permissions issues. Please check the permissions of the datapath directory and try again.")
+				return
+			} else {
+				c.String(http.StatusInternalServerError, "ERROR: Unable to create the file backing the topic.")
+				return
 			}
-			c.String(http.StatusInternalServerError, "ERROR: Unable to create the file backing the topic.")
 		}
 		c.String(http.StatusOK, "Success: Topic %s created successfully", name)
 	} else {
@@ -104,11 +111,13 @@ func getData(c *gin.Context) {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
 			c.String(http.StatusInternalServerError, "ERROR: The topic '"+topic+"' does not exist. Please create the topic and try again. ")
-		}
-		if errors.Is(err, os.ErrPermission) {
+			return
+		} else if errors.Is(err, os.ErrPermission) {
 			c.String(http.StatusInternalServerError, "ERROR: The backing file has invalid permissions. Please give the user running the metrics processor RW permissions over the backing file and try again.")
+			return
+		} else {
+			panic("ERROR: " + err.Error())
 		}
-		panic("ERROR: " + err.Error())
 	}
 	// Return the contents of the file backing the topic
 	c.File(datapath + topic + ".topic.metrics.data.txt")
@@ -121,8 +130,10 @@ func getLatestValue(c *gin.Context) {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
 			c.String(http.StatusInternalServerError, "ERROR: The topic '"+topic+"' does not exist. Please create the topic and try again. ")
+			return
+		} else {
+			panic(err.Error())
 		}
-		panic(err.Error())
 	}
 
 	fileInfo, _ := os.Stat(datapath + topic + ".topic.metrics.data.txt")
@@ -190,6 +201,7 @@ func listTopics(c *gin.Context) {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
 			c.String(http.StatusInternalServerError, "ERROR: Unable to read from the directory %s. Please ensure that the directory has the appropriate permissions and try again.", datapath)
+			return
 		}
 		panic(err.Error())
 	}
