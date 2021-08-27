@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	regex "regexp"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,11 +47,11 @@ func setDataPath(c *gin.Context) {
 func addData(c *gin.Context) {
 	topic := c.Query("topic")
 	var data interface{}
-	json.Unmarshal([]byte(c.Query("data")), data)
+	json.Unmarshal([]byte(c.Query("data")), &data)
 
 	var f *os.File
 
-	f, err := os.OpenFile(datapath+topic+"-topic-metrics-data.txt", os.O_RDWR, 0644)
+	f, err := os.OpenFile(datapath+topic+".topic.metrics.data.txt", os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
@@ -72,13 +73,13 @@ func addData(c *gin.Context) {
 	if err != nil {
 		c.String(http.StatusInternalServerError, "ERROR: Unable to add the data to the topic. The error was: "+err.Error())
 	}
-	c.String(http.StatusAccepted, "SUCCESS: The data was successfully pushed to the topic!")
+	c.String(http.StatusOK, "SUCCESS: The data was successfully pushed to the topic!")
 }
 
 func makeTopic(c *gin.Context) {
 	name := c.Query("name")
 	fmt.Printf("name = %s\n", name)
-	_, err := os.Create(datapath + name + "-topic-metrics-data.txt")
+	_, err := os.Create(datapath + name + ".topic.metrics.data.txt")
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			c.String(http.StatusInternalServerError, "ERROR: The topic already exists.")
@@ -92,7 +93,7 @@ func makeTopic(c *gin.Context) {
 
 func getData(c *gin.Context) {
 	topic := c.Query("topic")
-	_, err := os.OpenFile(datapath+topic+"-topic-metrics-data.txt", os.O_RDWR, 0644)
+	_, err := os.OpenFile(datapath+topic+".topic.metrics.data.txt", os.O_RDWR, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
@@ -104,12 +105,12 @@ func getData(c *gin.Context) {
 		panic("ERROR: " + err.Error())
 	}
 	// Return the contents of the file backing the topic
-	c.File(datapath + topic + "-topic-metrics-data.txt")
+	c.File(datapath + topic + ".topic.metrics.data.txt")
 }
 
 func getLatestValue(c *gin.Context) {
 	topic := c.Query("topic")
-	f, err := os.OpenFile(datapath+topic+"-topic-metrics-data.txt", os.O_RDWR, 0644)
+	f, err := os.OpenFile(datapath+topic+".topic.metrics.data.txt", os.O_RDWR, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// handle the case where the backing file doesn't exist
@@ -118,7 +119,7 @@ func getLatestValue(c *gin.Context) {
 		panic(err.Error())
 	}
 
-	fileInfo, _ := os.Stat(datapath + topic + "-topic-metrics-data.txt")
+	fileInfo, _ := os.Stat(datapath + topic + ".topic.metrics.data.txt")
 	if fileInfo.Size() == 0 {
 		c.String(http.StatusInternalServerError, "ERROR: No data currently in the topic!")
 	}
@@ -151,7 +152,27 @@ func getLatestValue(c *gin.Context) {
 }
 
 func listTopics(c *gin.Context) {
-
+	var entries []os.DirEntry
+	var err error
+	entries, err = os.ReadDir(datapath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// handle the case where the backing file doesn't exist
+			c.String(http.StatusInternalServerError, "ERROR: Unable to read from the directory %s. Please ensure that the directory has the appropriate permissions and try again.", datapath)
+		}
+		panic(err.Error())
+	}
+	re := regex.MustCompile("([^.]*)\\.topic\\.metrics\\.data\\.txt*")
+	var topics string = ""
+	for i := 0; i < len(entries); i++ {
+		if matches := re.FindStringSubmatch(entries[i].Name()); matches != nil {
+			topics += matches[1]
+		}
+		if i != len(entries)-1 {
+			topics += "\n"
+		}
+	}
+	c.String(http.StatusOK, topics)
 }
 
 // If the METRICS_PROCESSOR_DATAPATH environment variable isn't set, return 404 until the user calls 'PUT /datapath?path=<PATH>'
@@ -179,6 +200,7 @@ func main() {
 	router.Handle("PUT", "/put", addData)
 	router.Handle("PUT", "/create", makeTopic)
 	router.Handle("GET", "/latest", getLatestValue)
+	router.Handle("GET", "/topics", listTopics)
 
 	router.Run(":8080")
 }
