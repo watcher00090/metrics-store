@@ -77,8 +77,8 @@ func addData(c *gin.Context) {
 }
 
 func makeTopic(c *gin.Context) {
-	name := c.Query("name")
-	fmt.Printf("name = %s\n", name)
+	name := c.Query("topic")
+	fmt.Printf("Creating topic %s...\n", name)
 	_, err := os.Create(datapath + name + ".topic.metrics.data.txt")
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -89,6 +89,7 @@ func makeTopic(c *gin.Context) {
 		}
 		c.String(http.StatusInternalServerError, "ERROR: Unable to create the file backing the topic.")
 	}
+	c.String(http.StatusOK, "Success: Topic %s created successfully", name)
 }
 
 func getData(c *gin.Context) {
